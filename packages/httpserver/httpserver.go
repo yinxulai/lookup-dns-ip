@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/yinxulai/lookup-dns-ip/packages/cache"
@@ -37,7 +38,14 @@ func StartServer(domain string, port int) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			newLocation := fmt.Sprintf("%s%s", r.URL.Scheme, subdomain)
+
+			protocol := "http"
+			ssl := os.Getenv("SSL")
+			if ssl == "true" {
+				protocol = "https"
+			}
+
+			newLocation := fmt.Sprintf("%s://%s", protocol, subdomain)
 			http.Redirect(w, r, newLocation, http.StatusFound)
 		}
 
