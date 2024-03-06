@@ -13,10 +13,10 @@ import (
 func StartServer(domain string, port int) {
 	// 注册请求处理函数
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		requestHostname := r.URL.Hostname()
+		requestHost := r.Host
 
 		// 请求不是来自设定的域名，直接报错，不进行处理
-		if !strings.HasSuffix(requestHostname, domain) {
+		if !strings.HasSuffix(requestHost, domain) {
 			err := fmt.Errorf("only supports access using %s domain name", domain)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -31,7 +31,7 @@ func StartServer(domain string, port int) {
 		// http-server 将 dns-server 记录的 remote ip 返回
 
 		// 如果直接访问 domain
-		if requestHostname == domain {
+		if requestHost == domain {
 			subdomain, err := generateRandomSubDomain(domain)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
@@ -42,8 +42,8 @@ func StartServer(domain string, port int) {
 		}
 
 		// 如果是子域名访问
-		if strings.HasSuffix(requestHostname, "."+domain) {
-			id, _ := strings.CutSuffix(requestHostname, "."+domain)
+		if strings.HasSuffix(requestHost, "."+domain) {
+			id, _ := strings.CutSuffix(requestHost, "."+domain)
 			ip, exits := cache.GetCache(id)
 
 			if !exits {
@@ -60,8 +60,9 @@ func StartServer(domain string, port int) {
 	})
 
 	// 启动 HTTP 服务，监听在端口808
-	log.Println("start the server on port 8080")
-	err := http.ListenAndServe(":8080", nil)
+	listenAddr := fmt.Sprintf(":%d", port)
+	log.Printf("HTTP server started on port %d", port)
+	err := http.ListenAndServe(listenAddr, nil)
 	if err != nil {
 		log.Fatal("Failed to start the server:", err)
 	}

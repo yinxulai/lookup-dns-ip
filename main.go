@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"os"
 
 	"github.com/yinxulai/lookup-dns-ip/packages/dnsserver"
@@ -11,12 +9,6 @@ import (
 
 func main() {
 	domain := os.Getenv("DOMAIN")
-	if domain == "" {
-		err := fmt.Errorf("%s is not configured with the correct dns record", domain)
-		log.Fatal(err)
-		panic(err)
-	}
-
-	dnsserver.StartServer(domain, 8080)
-	httpserver.StartServer(domain, 8081)
+	go dnsserver.StartServer(domain, 53)
+	httpserver.StartServer(domain, 53)
 }

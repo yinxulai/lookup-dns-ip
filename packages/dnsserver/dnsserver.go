@@ -1,6 +1,7 @@
 package dnsserver
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -10,9 +11,14 @@ import (
 )
 
 func StartServer(domain string, port int) {
+	// DNS 系统中域名都以 . 结尾
+	if !strings.HasSuffix(domain, ".") {
+		domain = domain + "."
+	}
+
 	serverIPs, err := net.LookupIP(domain)
 	if err != nil || len(serverIPs) == 0 {
-		log.Fatalf("%s is not configured with the correct dns record", domain)
+		log.Printf("%s is not configured with the correct dns record", domain)
 	}
 
 	// 创建UDP监听地址
@@ -28,7 +34,7 @@ func StartServer(domain string, port int) {
 	}
 	defer conn.Close()
 
-	log.Println("DNS server started on port 53")
+	log.Printf("DNS server started on port %d", port)
 
 	buffer := make([]byte, 512)
 	for {
@@ -58,7 +64,7 @@ func StartServer(domain string, port int) {
 			}
 
 			// 构建响应报文
-			response := buildDNSResponse(question.Name, serverIPs[0].String())
+			response := buildDNSResponse(question, "127.0.0.1")
 
 			// 发送响应报文
 			_, err := conn.WriteToUDP(response, clientAddr)
@@ -75,36 +81,58 @@ func StartServer(domain string, port int) {
 // 解析DNS请求报文中的问题部分
 func parseDNSQuestion(data []byte) (*dnsQuestion, error) {
 	var question dnsQuestion
-
+	var headerOffset = 12
 	// 解析域名
-	domainName, _, err := parseDomainName(data, 12)
+	domainName, _, err := parseDomainName(data, headerOffset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse domain name: %w", err)
 	}
 
+	// 解析问题的类型和类
+	offset := headerOffset + len(domainName)
+	if len(data) < offset+4 {
+		return nil, fmt.Errorf("invalid DNS question data")
+	}
+
 	// 解析类型和类
 	question.Name = domainName
-	question.Type = uint16(data[len(data)-4])<<8 | uint16(data[len(data)-3])
-	question.Class = uint16(data[len(data)-2])<<8 | uint16(data[len(data)-1])
+	question.ID = binary.BigEndian.Uint16(data[0:2])
+	question.Type = binary.BigEndian.Uint16(data[offset+1 : offset+3])
+	question.Class = binary.BigEndian.Uint16(data[offset+3 : offset+5])
 
 	return &question, nil
 }
 
 // 构建DNS响应报文
-func buildDNSResponse(name string, ip string) []byte {
+func buildDNSResponse(requestQuestion *dnsQuestion, ip string) []byte {
 	// 构建报文头部
 	header := make([]byte, 12)
-	header[1] = 0x81 // 设置标志位为响应报文
-	header[3] = 0x01 // 设置问题数为1
+	header[0] = byte(requestQuestion.ID >> 8)
+	header[1] = byte(requestQuestion.ID)
+	header[2] = 0x81 // 设置标志位为响应报文
+
+	header[5] = 0x01  // 设置问题数为 1
+	header[7] = 0x01  // 设置回答数为 1
+	header[9] = 0x00  // 设置 Authority RRs 数为 0
+	header[11] = 0x00 // 设置 Additional RRs 数为 0
 
 	// 构建问题部分
-	question, _ := buildDNSQuestion(name, dnsTypeA, dnsClassIN)
+	responseQuestion, _ := buildDNSQuestion(
+		requestQuestion.Name,
+		requestQuestion.Type,
+		requestQuestion.Class,
+	)
 
 	// 构建回答部分
-	answer, _ := buildDNSAnswer(name, dnsTypeA, dnsClassIN, 5, ip)
+	answer, _ := buildDNSAnswer(
+		requestQuestion.Type,
+		requestQuestion.Class,
+		5, // ttl
+		ip,
+	)
 
 	// 拼接报文头部、问题部分和回答部分
-	response := append(header, question...)
+	response := append(header, responseQuestion...)
 	response = append(response, answer...)
 
 	return response
@@ -130,12 +158,9 @@ func buildDNSQuestion(name string, qType uint16, qClass uint16) ([]byte, error) 
 }
 
 // 构建DNS回答部分
-func buildDNSAnswer(name string, aType uint16, aClass uint16, ttl uint32, ip string) ([]byte, error) {
-	// 构建域名
-	domainName, err := buildDomainName(name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build domain name: %w", err)
-	}
+func buildDNSAnswer(aType uint16, aClass uint16, ttl uint32, ip string) ([]byte, error) {
+	// 域名指针
+	domain := []byte{0xc0, 0x0c}
 
 	// 构建类型和类
 	aTypeBytes := []byte{byte(aType >> 8), byte(aType)}
@@ -149,14 +174,14 @@ func buildDNSAnswer(name string, aType uint16, aClass uint16, ttl uint32, ip str
 		byte(ttl),
 	}
 
-	// 构建数据```go
+	// 构建数据
 	ipBytes := net.ParseIP(ip).To4()
 
 	// 构建数据长度
 	dataLength := []byte{0x00, 0x04}
 
 	// 拼接域名、类型、类、TTL、数据长度和数据
-	answer := append(domainName, aTypeBytes...)
+	answer := append(domain, aTypeBytes...)
 	answer = append(answer, aClassBytes...)
 	answer = append(answer, ttlBytes...)
 	answer = append(answer, dataLength...)
@@ -188,8 +213,6 @@ func buildDomainName(name string) ([]byte, error) {
 		domainName = append(domainName, labelLength)
 		domainName = append(domainName, []byte(l)...)
 	}
-
-	domainName = append(domainName, 0x00)
 
 	return domainName, nil
 }
@@ -230,6 +253,7 @@ func parseDomainName(data []byte, offset int) (string, int, error) {
 
 // DNS请求报文中的问题部分
 type dnsQuestion struct {
+	ID    uint16
 	Name  string
 	Type  uint16
 	Class uint16
