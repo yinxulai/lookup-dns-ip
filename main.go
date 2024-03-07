@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	"github.com/yinxulai/lookup-dns-ip/packages/dnsserver"
-	"github.com/yinxulai/lookup-dns-ip/packages/httpserver"
+	"github.com/yinxulai/lookup-dns-ip/internal/dnsserver"
+	"github.com/yinxulai/lookup-dns-ip/internal/httpserver"
 )
 
 func main() {

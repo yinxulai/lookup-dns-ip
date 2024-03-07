@@ -7,7 +7,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/yinxulai/lookup-dns-ip/packages/cache"
+	"github.com/yinxulai/lookup-dns-ip/internal/cache"
 )
 
 func StartServer(domain string, port int) {
