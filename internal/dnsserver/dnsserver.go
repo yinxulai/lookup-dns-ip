@@ -64,7 +64,7 @@ func StartServer(domain string, port int) {
 			}
 
 			// 构建响应报文
-			response := buildDNSResponse(question, "127.0.0.1")
+			response := buildDNSResponse(question, serverIPs[0].String())
 
 			// 发送响应报文
 			_, err := conn.WriteToUDP(response, clientAddr)
