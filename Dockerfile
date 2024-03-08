@@ -5,6 +5,8 @@ WORKDIR /workspace
 
 COPY . .
 
+RUN ls /workspace
+
 RUN CGO_ENABLED=0 GOOS=linux go build -o main main.go
 
 # 第二阶段：构建镜像

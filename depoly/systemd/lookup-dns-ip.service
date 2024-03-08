@@ -1,0 +1,11 @@
+[Unit]
+Description=Lookup DNS IP
+
+[Service]
+Type=simple
+Group=root
+Environment=DOMAIN=lookup-dns-ip.service.yinxulai.com
+ExecStart=/usr/local/bin/look-dns-ip
+
+[Install]
+WantedBy=multi-user.target
